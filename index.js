@@ -29,8 +29,24 @@ async function run() {
         // await client.connect();
 
         const menuCollections = client.db("bistrowBoss").collection("menus")
+        const usersCollections = client.db("bistrowBoss").collection("users")
         const reviewCollection = client.db("bistrowBoss").collection("reviews")
         const cartCollections = client.db("bistrowBoss").collection("carts")
+
+        // users related apis
+        app.post("/users", async (req, res) => {
+            const user = req.body;
+            // insert email is it doesn't exist
+            // You can do this many ways(1. email uniqe, 2. upsert, 3. simple checking)
+            const query = { email: user.email }
+            const existingUser = await usersCollections.findOne(query)
+            if (existingUser) {
+                return res.send({ message: "User already axist", insertedId: null })
+            }
+            const result = await usersCollections.insertOne(user)
+            res.send(result)
+        })
+
         // getting data specific users cartdata
         app.get("/carts", async (req, res) => {
             const userEmail = req.query.email
