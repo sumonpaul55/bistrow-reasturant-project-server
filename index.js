@@ -2,6 +2,7 @@ const express = require("express")
 const app = express();
 const cors = require("cors")
 require('dotenv').config();
+const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 //middilware
 app.use(cors({
@@ -22,7 +23,22 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
-
+// verify token middlewares
+const verifyToken = (req, res, next) => {
+    // console.log("inside verify token", req.headers.authorization)
+    if (!req.headers.authorization) {
+        return res.status(403).send({ message: `Unauthorized access` })
+    }
+    const token = req.headers.authorization.split(" ")[1];
+    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
+        if (err) {
+            return res.status(401).send({ message: `Forbidden access` })
+        }
+        req.decoded = decoded;
+        next()
+    })
+    // next();
+}
 async function run() {
     try {
         // Connect the client to the server	(optional starting in v4.7)
@@ -34,6 +50,38 @@ async function run() {
         const cartCollections = client.db("bistrowBoss").collection("carts")
 
         // users related apis
+        // jwt related api
+        app.post("/jwt", async (req, res) => {
+            const user = req.body
+            const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: "1h" })
+            res.send({ token })
+        })
+        // user role related apis
+        app.patch("/users/adming/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const updatedDoc = {
+                $set: {
+                    role: "admin"
+                }
+            }
+            const result = await usersCollections.updateOne(query, updatedDoc)
+            res.send(result)
+        })
+
+        // delete user api
+        app.delete("/users/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) };
+            const result = await usersCollections.deleteOne(query)
+            res.send(result)
+        })
+        // get users for admin dashboard
+        app.get("/users", verifyToken, async (req, res) => {
+            const result = await usersCollections.find().toArray();
+            res.send(result)
+        })
+        // stor user database
         app.post("/users", async (req, res) => {
             const user = req.body;
             // insert email is it doesn't exist
@@ -60,7 +108,7 @@ async function run() {
             res.send(result)
         })
 
-
+        // reviews related api
         app.get("/reviews", async (req, res) => {
             const result = await reviewCollection.find().toArray();
             res.send(result)
