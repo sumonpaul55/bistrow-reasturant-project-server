@@ -6,7 +6,7 @@ const jwt = require('jsonwebtoken');
 const port = process.env.PORT || 5000;
 //middilware
 app.use(cors({
-    origin: ["http://localhost:5173"],
+    origin: ["http://localhost:5173", "https://api.imgbb.com"],
     credentials: true
 }))
 app.use(express.json())
@@ -23,34 +23,6 @@ const client = new MongoClient(uri, {
         deprecationErrors: true,
     }
 });
-// verify token middlewares
-const verifyToken = (req, res, next) => {
-    // console.log("inside verify token", req.headers.authorization)
-    if (!req.headers.authorization) {
-        return res.status(401).send({ message: `Unauthorized access` })
-    }
-    const token = req.headers.authorization.split(" ")[1];
-    jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
-
-        if (err) {
-            return res.status(401).send({ message: `Unauthorized access` })
-        }
-        req.decoded = decoded;
-        next()
-    })
-}
-
-// use verify admin after verify token
-const verifyAdmin = async (req, res, next) => {
-    const email = req.decoded.email;
-    const query = { email: email }
-    const user = await usersCollections.findOne(query);
-    const isAdmin = user?.role === "admin";
-    if (!isAdmin) {
-        return res.status(403).send({ message: "Forbidden access" })
-    }
-    next();
-}
 
 async function run() {
     try {
@@ -61,7 +33,6 @@ async function run() {
         const usersCollections = client.db("bistrowBoss").collection("users")
         const reviewCollection = client.db("bistrowBoss").collection("reviews")
         const cartCollections = client.db("bistrowBoss").collection("carts")
-
         // users related apis
         // jwt related api
         app.post("/jwt", async (req, res) => {
@@ -69,8 +40,36 @@ async function run() {
             const token = jwt.sign(user, process.env.ACCESS_TOKEN, { expiresIn: "1h" })
             res.send({ token })
         })
+        // middleware
+        // verify token middlewares
+        const verifyToken = (req, res, next) => {
+            // console.log("inside verify token", req.headers.authorization)
+            if (!req.headers.authorization) {
+                return res.status(401).send({ message: `Unauthorized access` })
+            }
+            const token = req.headers.authorization.split(" ")[1];
+            jwt.verify(token, process.env.ACCESS_TOKEN, (err, decoded) => {
+                if (err) {
+                    return res.status(401).send({ message: `Unauthorized access` })
+                }
+                req.decoded = decoded;
+                next()
+            })
+        }
+        // use verify admin after verify token
+        const verifyAdmin = async (req, res, next) => {
+            const email = req.decoded.email;
+            const query = { email: email }
+            const user = await usersCollections.findOne(query);
+            const isAdmin = user?.role === "admin";
+            if (!isAdmin) {
+                return res.status(403).send({ message: "Forbidden access" })
+            }
+            next();
+        }
+
         // user role related apis
-        app.patch("/users/adming/:id", verifyToken, verifyAdmin, async (req, res) => {
+        app.patch("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const updatedDoc = {
@@ -108,6 +107,7 @@ async function run() {
             }
             res.send({ admin })
         })
+
         // stor user database
         app.post("/users", async (req, res) => {
             const user = req.body;
@@ -134,7 +134,14 @@ async function run() {
             const result = await menuCollections.find().toArray();
             res.send(result)
         })
+        // adding menu items to the menu
 
+        // adding menu items 
+        app.post("/menu", verifyToken, verifyAdmin, async (req, res) => {
+            const menuitems = req.body;
+            const result = await menuCollections.insertOne(menuitems)
+            res.send(result)
+        })
         // reviews related api
         app.get("/reviews", async (req, res) => {
             const result = await reviewCollection.find().toArray();
