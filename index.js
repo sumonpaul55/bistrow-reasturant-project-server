@@ -3,6 +3,7 @@ const app = express();
 const cors = require("cors")
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
+const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 5000;
 //middilware
 app.use(cors({
@@ -134,12 +135,42 @@ async function run() {
             const result = await menuCollections.find().toArray();
             res.send(result)
         })
-        // adding menu items to the menu
+        // get menu for update
+        app.get("/updateItems/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await menuCollections.findOne(query);
+            res.send(result)
+        })
+        // menu update apis
+        app.patch("/menu/:id", async (req, res) => {
+            const id = req.params.id;
+            const items = req.body;
+            const filter = { _id: new ObjectId(id) }
+            const updateDocs = {
+                $set: {
+                    name: items.name,
+                    category: items.category,
+                    price: items.price,
+                    recipe: items.recipe,
+                    image: items.image
+                }
+            }
+            const result = await menuCollections.updateOne(filter, updateDocs)
+            res.send(result)
+        })
 
         // adding menu items 
         app.post("/menu", verifyToken, verifyAdmin, async (req, res) => {
             const menuitems = req.body;
             const result = await menuCollections.insertOne(menuitems)
+            res.send(result)
+        })
+        // delete menu api
+        app.delete("/menu/:id", async (req, res) => {
+            const id = req.params.id;
+            const query = { _id: new ObjectId(id) }
+            const result = await menuCollections.deleteOne(query)
             res.send(result)
         })
         // reviews related api
@@ -164,7 +195,20 @@ async function run() {
         })
 
 
+        // pament intent
+        app.post("/create-payment-intent", async (req, res) => {
+            const { price } = req.body;
+            const amount = parseInt(price * 100);
 
+            const paymentIntent = await stripe.paymentIntent.create({
+                amount: amount,
+                currency: "usd",
+                payment_method_types: ["card"]
+            });
+            res.send({
+                clientSecret: paymentIntent.client_secret
+            })
+        })
 
 
 
