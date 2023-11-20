@@ -34,6 +34,7 @@ async function run() {
         const usersCollections = client.db("bistrowBoss").collection("users")
         const reviewCollection = client.db("bistrowBoss").collection("reviews")
         const cartCollections = client.db("bistrowBoss").collection("carts")
+        const paymentCollections = client.db("bistrowBoss").collection("payments")
         // users related apis
         // jwt related api
         app.post("/jwt", async (req, res) => {
@@ -194,13 +195,11 @@ async function run() {
             res.send(result)
         })
 
-
         // pament intent
         app.post("/create-payment-intent", async (req, res) => {
             const { price } = req.body;
             const amount = parseInt(price * 100);
-
-            const paymentIntent = await stripe.paymentIntent.create({
+            const paymentIntent = await stripe.paymentIntents.create({
                 amount: amount,
                 currency: "usd",
                 payment_method_types: ["card"]
@@ -209,7 +208,19 @@ async function run() {
                 clientSecret: paymentIntent.client_secret
             })
         })
-
+        app.post("/payment", async (req, res) => {
+            const payment = req.body;
+            const paymentResult = await paymentCollections.insertOne(payment)
+            // carefully delete each items from the cart
+            // console.log("payment info", payment)
+            const query = {
+                _id: {
+                    $in: payment.cartIds.map(id => new ObjectId(id))
+                }
+            }
+            const deleteResult = await cartCollections.deleteMany(query)
+            res.send({ paymentResult, deleteResult })
+        })
 
 
 
