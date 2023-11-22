@@ -148,15 +148,19 @@ async function run() {
             const id = req.params.id;
             const items = req.body;
             const filter = { _id: new ObjectId(id) }
-            const updateDocs = {
-                $set: {
-                    name: items.name,
-                    category: items.category,
-                    price: items.price,
-                    recipe: items.recipe,
-                    image: items.image
-                }
+            const updateableData = {
+                name: items.name,
+                category: items.category,
+                price: items.price,
+                recipe: items.recipe,
             }
+            if (items.image) {
+                updateableData.image = items.image
+            }
+            const updateDocs = {
+                $set: updateableData
+            }
+            // console.log(updateDocs)
             const result = await menuCollections.updateOne(filter, updateDocs)
             res.send(result)
         })
@@ -194,20 +198,32 @@ async function run() {
             const result = await cartCollections.deleteOne(query);
             res.send(result)
         })
+        // payment history apis
+        app.get("/payment/:email", verifyToken, async (req, res) => {
+            const query = { email: req.params.email }
 
+            if (req.params.email !== req.decoded.email) {
+                return res.status(403).send({ message: "Forbidden access" })
+            }
+            const result = await paymentCollections.find(query).toArray();
+            res.send(result)
+        })
         // pament intent
         app.post("/create-payment-intent", async (req, res) => {
             const { price } = req.body;
+            // console.log(price)
             const amount = parseInt(price * 100);
+            if (!price || price < 1) return;
             const paymentIntent = await stripe.paymentIntents.create({
                 amount: amount,
                 currency: "usd",
-                payment_method_types: ["card"]
+                payment_method_types: ["card"],
             });
             res.send({
                 clientSecret: paymentIntent.client_secret
             })
         })
+
         app.post("/payment", async (req, res) => {
             const payment = req.body;
             const paymentResult = await paymentCollections.insertOne(payment)
