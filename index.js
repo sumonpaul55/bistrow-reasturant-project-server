@@ -226,7 +226,7 @@ async function run() {
         app.post("/payment", async (req, res) => {
             const payment = req.body;
             payment.menuItemIds = payment.menuItemIds.map((item) => new ObjectId(item))
-            console.log(payment)
+            // console.log(payment)
             const paymentResult = await paymentCollections.insertOne(payment)
             // carefully delete each items from the cart
             // console.log("payment info", payment)
@@ -239,36 +239,37 @@ async function run() {
             res.send({ paymentResult, deleteResult })
         })
         //stats or analytics
-        // app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
-        //     try {
-        //         const user = await usersCollections.estimatedDocumentCount();
-        //         const menuItems = await menuCollections.estimatedDocumentCount();
-        //         // this is the not best // we should query with payment confirm and not possibility for refund
-        //         // const payments = await paymentCollections.find().toArray();
-        //         // const revenue = payments.reduce((accomulated, items) => accomulated + parseFloat(items.price), 0)
-        //         const result = await paymentCollections.aggregate([
-        //             {
-        //                 $group: {
-        //                     _id: null,
-        //                     totalRevenue: {
-        //                         $sum: "$price"
-        //                     }
-        //                 }
-        //             }
-        //         ]).toArray();
-        //         const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+        app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
+            try {
+                const user = await usersCollections.estimatedDocumentCount();
+                const menuItems = await menuCollections.estimatedDocumentCount();
+                // this is the not best // we should query with payment confirm and not possibility for refund
+                const payments = await paymentCollections.find().toArray();
+                // const revenue = payments.reduce((accomulated, items) => accomulated + parseFloat(items.price), 0)
+                const result = await paymentCollections.aggregate([
+                    {
+                        $group: {
+                            _id: null,
+                            totalRevenue: {
+                                $sum: "$price"
+                            }
+                        }
+                    }
+                ]).toArray();
 
-        //         const orders = await cartCollections.estimatedDocumentCount();
-        //         res.send({
-        //             user, menuItems, revenue, orders
-        //         })
-        //     } catch (err) {
-        //         res.status(500).send({ message: `${err}` })
-        //     }
-        // })
+                const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+
+                const orders = await cartCollections.estimatedDocumentCount();
+                res.send({
+                    user, menuItems, orders, revenue
+                })
+            } catch (err) {
+                res.status(500).send({ message: `${err}` })
+            }
+        })
 
         // using aggrate pipeline
-        app.get('/order-stats', async (req, res) => {
+        app.get('/order-stats', verifyToken, verifyAdmin, async (req, res) => {
             const result = await paymentCollections.aggregate([
                 {
                     $unwind: "$menuItemIds"
@@ -278,21 +279,28 @@ async function run() {
                         from: "menus",
                         localField: "menuItemIds",
                         foreignField: "_id",
-                        as: "menuItems"
+                        as: "sumon"
                     }
                 },
                 {
-                    $unwind: "$menuItems"
+                    $unwind: "$sumon"
                 },
                 {
                     $group: {
-                        _id: "$menuItems.category",
+                        _id: "$sumon.category",
                         quantity: { $sum: 1 },
-                        revenue: { $sum: "menuItems.price" }
+                        revenue: { $sum: "$sumon.price" }
+                    }
+                },
+                {
+                    $project: {
+                        _id: 0,
+                        category: "$_id",
+                        quantity: "$quantity",
+                        revenue: "$revenue"
                     }
                 }
             ]).toArray()
-
             res.send(result)
         })
 
