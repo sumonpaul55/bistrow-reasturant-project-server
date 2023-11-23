@@ -225,6 +225,8 @@ async function run() {
 
         app.post("/payment", async (req, res) => {
             const payment = req.body;
+            payment.menuItemIds = payment.menuItemIds.map((item) => new ObjectId(item))
+            console.log(payment)
             const paymentResult = await paymentCollections.insertOne(payment)
             // carefully delete each items from the cart
             // console.log("payment info", payment)
@@ -237,33 +239,64 @@ async function run() {
             res.send({ paymentResult, deleteResult })
         })
         //stats or analytics
-        app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
-            try {
-                const user = await usersCollections.estimatedDocumentCount();
-                const menuItems = await menuCollections.estimatedDocumentCount();
-                // this is the not best // we should query with payment confirm and not possibility for refund
-                // const payments = await paymentCollections.find().toArray();
-                // const revenue = payments.reduce((accomulated, items) => accomulated + parseFloat(items.price), 0)
-                const result = await paymentCollections.aggregate([
-                    {
-                        $group: {
-                            _id: null,
-                            totalRevenue: {
-                                $sum: "$price"
-                            }
-                        }
-                    }
-                ]).toArray();
-                const revenue = result.length > 0 ? result[0].totalRevenue : 0;
+        // app.get("/admin-stats", verifyToken, verifyAdmin, async (req, res) => {
+        //     try {
+        //         const user = await usersCollections.estimatedDocumentCount();
+        //         const menuItems = await menuCollections.estimatedDocumentCount();
+        //         // this is the not best // we should query with payment confirm and not possibility for refund
+        //         // const payments = await paymentCollections.find().toArray();
+        //         // const revenue = payments.reduce((accomulated, items) => accomulated + parseFloat(items.price), 0)
+        //         const result = await paymentCollections.aggregate([
+        //             {
+        //                 $group: {
+        //                     _id: null,
+        //                     totalRevenue: {
+        //                         $sum: "$price"
+        //                     }
+        //                 }
+        //             }
+        //         ]).toArray();
+        //         const revenue = result.length > 0 ? result[0].totalRevenue : 0;
 
-                const orders = await cartCollections.estimatedDocumentCount();
-                res.send({
-                    user, menuItems, revenue, orders
-                })
-            } catch (err) {
-                res.status(500).send({ message: `${err}` })
-            }
+        //         const orders = await cartCollections.estimatedDocumentCount();
+        //         res.send({
+        //             user, menuItems, revenue, orders
+        //         })
+        //     } catch (err) {
+        //         res.status(500).send({ message: `${err}` })
+        //     }
+        // })
+
+        // using aggrate pipeline
+        app.get('/order-stats', async (req, res) => {
+            const result = await paymentCollections.aggregate([
+                {
+                    $unwind: "$menuItemIds"
+                },
+                {
+                    $lookup: {
+                        from: "menus",
+                        localField: "menuItemIds",
+                        foreignField: "_id",
+                        as: "menuItems"
+                    }
+                },
+                {
+                    $unwind: "$menuItems"
+                },
+                {
+                    $group: {
+                        _id: "$menuItems.category",
+                        quantity: { $sum: 1 },
+                        revenue: { $sum: "menuItems.price" }
+                    }
+                }
+            ]).toArray()
+
+            res.send(result)
         })
+
+
         // Send a ping to confirm a successful connection
         await client.db("admin").command({ ping: 1 });
         console.log("Pinged your deployment. You successfully connected to MongoDB!");
