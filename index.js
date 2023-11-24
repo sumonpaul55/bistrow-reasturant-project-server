@@ -7,7 +7,7 @@ const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
 const port = process.env.PORT || 5000;
 //middilware
 app.use(cors({
-    origin: ["http://localhost:5173", "https://api.imgbb.com"],
+    origin: ["https://bistrow-boss.web.app", "https://api.imgbb.com"],
     credentials: true
 }))
 app.use(express.json())
@@ -163,7 +163,6 @@ async function run() {
             const result = await menuCollections.updateOne(filter, updateDocs)
             res.send(result)
         })
-
         // adding menu items 
         app.post("/menu", verifyToken, verifyAdmin, async (req, res) => {
             const menuitems = req.body;
