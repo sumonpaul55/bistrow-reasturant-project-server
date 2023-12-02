@@ -4,16 +4,23 @@ const cors = require("cors")
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
 const stripe = require("stripe")(process.env.STRIPE_SECRET_KEY)
+const formData = require('form-data');
+const Mailgun = require('mailgun.js');
+const mailgun = new Mailgun(formData);
+const mg = mailgun.client({
+    username: 'api',
+    key: process.env.MAILGUN_API_KEY
+});
+
 const port = process.env.PORT || 5000;
 //middilware
 app.use(cors({
-    origin: ["https://bistrow-boss.web.app", "https://api.imgbb.com"],
+    origin: ["http://localhost:5173", "https://api.imgbb.com"],
     credentials: true
 }))
 app.use(express.json())
-
-
 const { MongoClient, ServerApiVersion, ObjectId } = require('mongodb');
+
 const uri = `mongodb+srv://${process.env.DB_USER}:${process.env.DB_PASS}@cluster0.nrfwsc1.mongodb.net/?retryWrites=true&w=majority`;
 
 // Create a MongoClient with a MongoClientOptions object to set the Stable API version
@@ -70,7 +77,7 @@ async function run() {
         }
 
         // user role related apis
-        app.patch("/users/admin/:id", verifyToken, verifyAdmin, async (req, res) => {
+        app.patch("/users/admin/:id", async (req, res) => {
             const id = req.params.id;
             const query = { _id: new ObjectId(id) }
             const updatedDoc = {
@@ -224,6 +231,7 @@ async function run() {
 
         app.post("/payment", async (req, res) => {
             const payment = req.body;
+            console.log(payment)
             payment.menuItemIds = payment.menuItemIds.map((item) => new ObjectId(item))
             // console.log(payment)
             const paymentResult = await paymentCollections.insertOne(payment)
@@ -235,6 +243,21 @@ async function run() {
                 }
             }
             const deleteResult = await cartCollections.deleteMany(query)
+            mg.messages.create(process.env.MAIL_SENDING_DOMAIN, {
+                from: "Excited User <mailgun@sandbox-123.mailgun.org>",
+                to: ["sumonpaul3217@gmail.com"],
+                subject: "Bistrow boss order confirmation!",
+                text: "Testing some Mailgun awesomeness!",
+                html: `
+                    <div>
+                        <h2>Thank you for you roder</h2>
+                        <h4>Your Transaction id <strong>${payment.transactionid}</strong></h4>
+                        <p>We would like get feedback from you about the food</p>
+                    </div>
+                `
+            })
+                .then(msg => console.log(msg)) // logs response data
+                .catch(err => console.log(err)); // logs any error
             res.send({ paymentResult, deleteResult })
         })
         //stats or analytics
